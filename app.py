@@ -1,6 +1,5 @@
 import streamlit as st
 import pymysql
-import hashlib
 
 # ---------------------- 全局配置 ----------------------
 st.set_page_config(page_title="学生成绩管理系统", layout="wide")
@@ -9,35 +8,35 @@ st.set_page_config(page_title="学生成绩管理系统", layout="wide")
 def connect_db():
     """连接数据库，返回连接对象"""
     try:
-        # ！！！重点修改：把这里的数据库信息改成你自己的！！！
-        # 本地测试用：host填127.0.0.1，部署时改成ngrok/云数据库地址
+        # Sealos云数据库配置（已填好你的信息）
         conn = pymysql.connect(
-            host="dbconn.sealoshzh.site",  # 本地MySQL地址（部署时改ngrok地址）
-            port=40210,         # MySQL端口（部署时改ngrok端口）
-            user="root",       # 你的MySQL用户名
-            password="d7f6x5pf", # 你的MySQL密码
-            db="grade_management", # 数据库名（必须和你本地的一致）
+            host="dbconn.sealoshzh.site",  
+            port=40210,         
+            user="root",       
+            password="d7f6x5pf",
+            db="grade_management",
             charset="utf8mb4"
         )
         return conn
     except Exception as e:
         st.error(f"数据库连接失败：{str(e)}")
-        st.warning("请检查：1. MySQL是否启动 2. 账号密码是否正确 3. 数据库是否存在")
+        st.warning("请检查：1. 云数据库是否正常运行 2. 账号密码/端口是否正确")
         return None
 
 # ---------------------- 绩点计算工具函数 ----------------------
 def calculate_gpa(score):
     """根据分数计算单门课绩点"""
+    score = float(score)
     if score < 60:
         return 0.0
     elif 60 <= score < 70:
-        return 1 + (score - 60) / 10
+        return round(1 + (score - 60) / 10, 1)
     elif 70 <= score < 80:
-        return 2 + (score - 70) / 10
+        return round(2 + (score - 70) / 10, 1)
     elif 80 <= score < 90:
-        return 3 + (score - 80) / 10
+        return round(3 + (score - 80) / 10, 1)
     elif 90 <= score <= 100:
-        return 4 + (score - 90) / 10
+        return round(4 + (score - 90) / 10, 1)
     else:
         return 0.0
 
@@ -66,7 +65,7 @@ def login_page():
                     cursor.execute("SELECT * FROM user WHERE username = %s", (username,))
                     user = cursor.fetchone()
                     if user:
-                        # 验证密码（这里先明文，后续可加密）
+                        # 验证密码（明文，适配测试场景）
                         if user[2] == password:
                             # 登录成功，保存用户状态
                             st.session_state["is_login"] = True
@@ -146,22 +145,20 @@ def main_page():
                             st.subheader("📝 成绩与绩点")
                             total_gpa = 0.0
                             course_count = len(scores)
-                            # 展示成绩表格
+                            # 整理成绩数据
                             score_data = []
                             for course, score in scores:
-                                score = float(score)
                                 gpa = calculate_gpa(score)
                                 total_gpa += gpa
-                                score_data.append([course, score, round(gpa, 1)])
-                            # 显示表格
+                                score_data.append({
+                                    "课程名称": course,
+                                    "成绩": score,
+                                    "单门绩点": gpa
+                                })
+                            # 展示表格（修复参数适配问题）
                             st.dataframe(
                                 score_data,
-                                column_config={
-                                    0: "课程名称",
-                                    1: "成绩",
-                                    2: "单门绩点"
-                                },
-                                index=False
+                                use_container_width=True
                             )
                             # 显示平均绩点
                             avg_gpa = round(total_gpa / course_count, 2)
@@ -211,7 +208,7 @@ def main_page():
                         )
                         db.commit()
                         st.success("✅ 学生新增成功！")
-                        # 清空表单
+                        # 刷新表单
                         st.rerun()
                     except Exception as e:
                         db.rollback()
@@ -249,28 +246,27 @@ def main_page():
                         course_count = 0
                         for score in scores:
                             if score[0] is not None:
-                                total_gpa += calculate_gpa(float(score[0]))
+                                total_gpa += calculate_gpa(score[0])
                                 course_count += 1
                         avg_gpa = round(total_gpa / course_count, 2) if course_count > 0 else 0.0
-                        rank_data.append([stu_id, stu_name, stu_class, avg_gpa])
+                        rank_data.append({
+                            "排名": "",  # 占位，后续填充
+                            "学号": stu_id,
+                            "姓名": stu_name,
+                            "班级": stu_class,
+                            "平均绩点": avg_gpa
+                        })
                     
                     # 按平均绩点降序排序
-                    rank_data.sort(key=lambda x: x[3], reverse=True)
-                    # 加排名
+                    rank_data.sort(key=lambda x: x["平均绩点"], reverse=True)
+                    # 填充排名
                     for i in range(len(rank_data)):
-                        rank_data[i].insert(0, i+1)
+                        rank_data[i]["排名"] = i + 1
                     
-                    # 展示排名表格
+                    # 展示排名表格（修复参数适配问题）
                     st.dataframe(
                         rank_data,
-                        column_config={
-                            0: "排名",
-                            1: "学号",
-                            2: "姓名",
-                            3: "班级",
-                            4: "平均绩点"
-                        },
-                        index=False
+                        use_container_width=True
                     )
                 except Exception as e:
                     st.error(f"排名查询失败：{str(e)}")
