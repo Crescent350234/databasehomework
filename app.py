@@ -94,10 +94,10 @@ def main_page():
             st.rerun()
         st.divider()
     
-    # 主功能菜单
+    # 主功能菜单（新增删除学生选项）
     menu = st.selectbox(
         "请选择功能",
-        ["学生信息查询", "新增学生", "绩点排名", "成绩管理"],
+        ["学生信息查询", "新增学生", "删除学生", "绩点排名", "成绩管理"],
         index=0
     )
     
@@ -217,7 +217,58 @@ def main_page():
                         cursor.close()
                         db.close()
     
-    # 3. 绩点排名（所有人可看）
+    # 3. 删除学生（仅管理员可操作）
+    if menu == "删除学生":
+        st.subheader("🗑️ 删除学生")
+        # 权限判断
+        if st.session_state["role"] != "admin":
+            st.error("❌ 无权限！仅管理员可删除学生")
+            return
+        
+        with st.form("delete_stu_form"):
+            stu_id = st.text_input("请输入要删除的学生学号", placeholder="例如：2024001")
+            # 二次确认（防止误删）
+            confirm_delete = st.checkbox("我确认要删除该学生（会同步删除其成绩）")
+            delete_btn = st.form_submit_button("删除学生", type="primary")
+            
+            if delete_btn:
+                if not stu_id:
+                    st.warning("⚠️ 请输入要删除的学生学号！")
+                    return
+                if not confirm_delete:
+                    st.warning("⚠️ 请勾选确认删除！")
+                    return
+                
+                db = connect_db()
+                if db:
+                    cursor = db.cursor()
+                    try:
+                        # 检查学生是否存在
+                        cursor.execute("SELECT * FROM student WHERE student_id = %s", (stu_id,))
+                        if not cursor.fetchone():
+                            st.error("❌ 该学生不存在！")
+                            return
+                        
+                        # 先删除该学生的成绩（外键关联）
+                        cursor.execute("DELETE FROM score WHERE student_id = %s", (stu_id,))
+                        # 再删除学生信息
+                        cursor.execute("DELETE FROM student WHERE student_id = %s", (stu_id,))
+                        db.commit()
+                        
+                        if cursor.rowcount > 0:
+                            st.success("✅ 学生删除成功（含关联成绩）！")
+                        else:
+                            st.info("ℹ️ 无学生数据被删除！")
+                        # 刷新表单
+                        st.rerun()
+                    except Exception as e:
+                        db.rollback()
+                        st.error(f"删除失败：{str(e)}")
+                    finally:
+                        cursor.close()
+                        db.close()
+    
+    # 4. 绩点排名（所有人可看）
     if menu == "绩点排名":
         st.subheader("🏆 学生绩点排名（降序）")
         query_rank_btn = st.button("刷新排名", type="primary")
@@ -274,7 +325,7 @@ def main_page():
                     cursor.close()
                     db.close()
     
-    # 4. 成绩管理（仅管理员可操作）
+    # 5. 成绩管理（仅管理员可操作）
     if menu == "成绩管理":
         st.subheader("📖 成绩新增/修改")
         if st.session_state["role"] != "admin":
@@ -284,7 +335,7 @@ def main_page():
         # 子菜单：新增/修改成绩
         sub_menu = st.radio("请选择操作", ["新增成绩", "修改成绩"])
         
-        # 4.1 新增成绩
+        # 5.1 新增成绩
         if sub_menu == "新增成绩":
             with st.form("add_score_form"):
                 col1, col2, col3 = st.columns(3)
@@ -330,7 +381,7 @@ def main_page():
                             cursor.close()
                             db.close()
         
-        # 4.2 修改成绩
+        # 5.2 修改成绩
         if sub_menu == "修改成绩":
             with st.form("update_score_form"):
                 col1, col2, col3 = st.columns(3)
