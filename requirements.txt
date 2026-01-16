@@ -1,3 +1,6 @@
 streamlit
 pymysql
-cryptography
+pandas
+openpyxl
+matplotlib
+pillow
